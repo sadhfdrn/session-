@@ -35,8 +35,10 @@ if (!fs.existsSync('./tokens')) {
     fs.mkdirSync('./tokens');
 }
 
-// Get browser configuration
+// Get browser configuration optimized for cloud deployment
 function getBrowserConfig() {
+    const isCloud = process.env.NODE_ENV === 'production' || process.env.KOYEB_APP_NAME;
+    
     const config = {
         headless: 'new',
         devtools: false,
@@ -44,6 +46,12 @@ function getBrowserConfig() {
         debug: false,
         logQR: false,
         browserWS: '',
+        disableSpins: true,
+        disableWelcome: true,
+        updatesLog: false,
+        autoClose: 45000, // Reduced timeout
+        createPathFileToken: false,
+        waitForLogin: 30000, // Reduced wait time
         browserArgs: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -53,19 +61,66 @@ function getBrowserConfig() {
             '--no-zygote',
             '--disable-gpu',
             '--disable-web-security',
-            '--disable-features=VizDisplayCompositor'
+            '--disable-features=VizDisplayCompositor',
+            '--disable-background-timer-throttling',
+            '--disable-backgrounding-occluded-windows',
+            '--disable-renderer-backgrounding',
+            '--disable-extensions',
+            '--disable-plugins',
+            '--disable-default-apps',
+            '--disable-hang-monitor',
+            '--disable-prompt-on-repost',
+            '--disable-sync',
+            '--disable-translate',
+            '--metrics-recording-only',
+            '--no-default-browser-check',
+            '--safebrowsing-disable-auto-update',
+            '--enable-automation',
+            '--password-store=basic',
+            '--use-mock-keychain',
+            '--single-process'
         ],
         puppeteerOptions: {
             headless: 'new',
+            timeout: 30000, // 30 second timeout
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--disable-web-security'
+                '--disable-web-security',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-extensions',
+                '--disable-plugins',
+                '--disable-default-apps',
+                '--disable-hang-monitor',
+                '--disable-prompt-on-repost',
+                '--disable-sync',
+                '--disable-translate',
+                '--metrics-recording-only',
+                '--no-default-browser-check',
+                '--safebrowsing-disable-auto-update',
+                '--enable-automation',
+                '--password-store=basic',
+                '--use-mock-keychain'
             ]
         }
     };
+
+    // Add cloud-specific optimizations
+    if (isCloud) {
+        config.browserArgs.push('--memory-pressure-off');
+        config.browserArgs.push('--max_old_space_size=4096');
+        config.puppeteerOptions.args.push('--memory-pressure-off');
+        config.puppeteerOptions.args.push('--max_old_space_size=4096');
+        
+        // Reduce timeouts for cloud environment
+        config.autoClose = 30000;
+        config.waitForLogin = 20000;
+        config.puppeteerOptions.timeout = 20000;
+    }
 
     // Use installed Chromium if available
     if (chromiumPath) {
@@ -73,6 +128,7 @@ function getBrowserConfig() {
         console.log('🚀 Using Chromium from:', chromiumPath);
     }
 
+    console.log(`🔧 Browser config for ${isCloud ? 'cloud' : 'local'} environment`);
     return config;
 }
 
@@ -98,36 +154,60 @@ app.post('/api/request-pair-code', async (req, res) => {
 
         console.log(`Starting pairing process for ${cleanedNumber}`);
 
-        // Get browser configuration with Chromium
-        const browserConfig = getBrowserConfig();
+        // Start wppconnect with pairing code using retry logic
+        const client = await createWppConnectClient(sessionName, cleanedNumber);
 
-        // Start wppconnect with pairing code
-        const client = await wppconnect.create({
-            session: sessionName,
-            tokenStore: 'file',
-            folderNameToken: './tokens',
-            ...browserConfig,
-            // Callback for pairing code
-            catchQR: (base64Qr, asciiQR, attempts, urlCode) => {
-                console.log('QR Code received, requesting pairing code...');
-            },
-            // Status callback
-            statusFind: (statusSession, session) => {
-                console.log('Status Session: ', statusSession);
-                console.log('Session name: ', session);
-                
-                const phoneNum = session.replace('session_', '');
-                sessionStates.set(phoneNum, { 
-                    status: statusSession, 
-                    timestamp: Date.now(),
-                    session: session 
-                });
-            },
-            // Browser close callback
-            onLoadingScreen: (percent, message) => {
-                console.log('LOADING_SCREEN', percent, message);
+// Helper function to create wppconnect client with retry logic
+async function createWppConnectClient(sessionName, cleanedNumber, maxRetries = 2) {
+    const browserConfig = getBrowserConfig();
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            console.log(`Attempt ${attempt}/${maxRetries} to create client for ${cleanedNumber}`);
+            
+            const client = await wppconnect.create({
+                session: sessionName,
+                tokenStore: 'file',
+                folderNameToken: './tokens',
+                ...browserConfig,
+                // Callback for pairing code
+                catchQR: (base64Qr, asciiQR, attempts, urlCode) => {
+                    console.log(`QR Code received (attempt ${attempts}), requesting pairing code...`);
+                },
+                // Status callback
+                statusFind: (statusSession, session) => {
+                    console.log('Status Session: ', statusSession);
+                    console.log('Session name: ', session);
+                    
+                    const phoneNum = session.replace('session_', '');
+                    sessionStates.set(phoneNum, { 
+                        status: statusSession, 
+                        timestamp: Date.now(),
+                        session: session 
+                    });
+                },
+                // Browser close callback
+                onLoadingScreen: (percent, message) => {
+                    console.log('LOADING_SCREEN', percent, message);
+                }
+            });
+            
+            console.log(`✅ Client created successfully for ${cleanedNumber} on attempt ${attempt}`);
+            return client;
+            
+        } catch (error) {
+            console.error(`❌ Attempt ${attempt}/${maxRetries} failed for ${cleanedNumber}:`, error.message);
+            
+            if (attempt === maxRetries) {
+                throw error;
             }
-        });
+            
+            // Wait before retry
+            console.log(`⏳ Waiting 5 seconds before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+    }
+}
 
         // Store the client
         activeSessions.set(cleanedNumber, client);

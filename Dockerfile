@@ -80,8 +80,15 @@ RUN npm install
 # Copy application code
 COPY . .
 
-# Create tokens directory
-RUN mkdir -p tokens && chown -R pptruser:pptruser tokens
+# Create required directories and set permissions
+RUN mkdir -p tokens public && chown -R pptruser:pptruser tokens public
+
+# Create the public directory structure and copy frontend
+RUN mkdir -p public
+COPY index.html public/index.html
+
+# Ensure proper permissions for all files
+RUN chown -R pptruser:pptruser /app
 
 # Switch to non-root user
 USER pptruser
@@ -97,7 +104,7 @@ ENV DISPLAY=:99
 EXPOSE 3000
 
 # Health check with increased timeout
-HEALTHCHECK --interval=45s --timeout=45s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=45s --timeout=45s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:3000/api/health || exit 1
 
 # Start the application

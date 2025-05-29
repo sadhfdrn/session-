@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y \
     fonts-kacst \
     fonts-freefont-ttf \
     xdg-utils \
+    curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -41,8 +42,8 @@ WORKDIR /usr/src/app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies using npm install (works without lock file)
+RUN npm install --omit=dev
 
 # Copy application code
 COPY . .

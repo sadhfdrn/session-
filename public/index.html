@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Session Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transform: rotate(45deg);
+            animation: shimmer 3s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+        }
+
+        .logo {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2rem;
+            font-weight: 600;
+            position: relative;
+            z-index: 1;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+            position: relative;
+            z-index: 1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            text-align: left;
+        }
+
+        input[type="tel"] {
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid #e1e5e9;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        input[type="tel"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .btn-loading {
+            position: relative;
+        }
+
+        .btn-loading::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            top: 50%;
+            left: 50%;
+            margin-left: -10px;
+            margin-top: -10px;
+            border: 2px solid transparent;
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            margin-top: 25px;
+            padding: 20px;
+            border-radius: 12px;
+            position: relative;
+            z-index: 1;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .success {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .error {
+            background: linear-gradient(135deg, #f44336, #da190b);
+            color: white;
+        }
+
+        .pairing-code {
+            font-size: 2rem;
+            font-weight: bold;
+            letter-spacing: 3px;
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+            text-align: left;
+            position: relative;
+            z-index: 1;
+        }
+
+        .instructions h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .instructions ol {
+            color: #555;
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-waiting {
+            background: #ff9800;
+        }
+
+        .status-connected {
+            background: #4CAF50;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                margin: 10px;
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            .logo {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">📱</div>
+        <h1>WhatsApp Session Generator</h1>
+        <p class="subtitle">Generate your WhatsApp session string securely</p>
+        
+        <form id="sessionForm">
+            <div class="form-group">
+                <label for="phoneNumber">Phone Number (with country code)</label>
+                <input 
+                    type="tel" 
+                    id="phoneNumber" 
+                    placeholder="e.g., 1234567890" 
+                    required
+                    pattern="[0-9]+"
+                    title="Please enter only numbers"
+                >
+            </div>
+            
+            <div class="form-group">
+                <label for="method">Generation Method</label>
+                <select id="method" class="btn" style="background: rgba(255,255,255,0.9); color: #333; text-align: left; padding: 15px 20px;">
+                    <option value="v1">WPPConnect Method (Recommended)</option>
+                    <option value="v2">Alternative Method (Experimental)</option>
+                </select>
+            </div>
+            
+            <button type="submit" class="btn" id="generateBtn">
+                Generate Pairing Code
+            </button>
+        </form>
+        
+        <div id="result"></div>
+        
+        <div class="instructions">
+            <h3>📋 How it works:</h3>
+            <ol>
+                <li>Enter your phone number (numbers only, no + or spaces)</li>
+                <li>Choose your preferred generation method</li>
+                <li>Click "Generate Pairing Code"</li>
+                <li>Enter the code in WhatsApp Settings → Linked Devices</li>
+                <li>Your session string will be sent to your WhatsApp DM</li>
+                <li>Keep your session string safe and don't share it!</li>
+            </ol>
+            <p style="margin-top: 15px; padding: 10px; background: rgba(255,193,7,0.1); border-radius: 8px; font-size: 0.9rem;">
+                <strong>🔄 New:</strong> Now using WPPConnect library for better reliability! If one method doesn't work, try the alternative method.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('sessionForm');
+        const phoneInput = document.getElementById('phoneNumber');
+        const methodSelect = document.getElementById('method');
+        const generateBtn = document.getElementById('generateBtn');
+        const resultDiv = document.getElementById('result');
+
+        let checkStatusInterval;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const phoneNumber = phoneInput.value.trim();
+            const method = methodSelect.value;
+            
+            if (!phoneNumber) {
+                showError('Please enter a valid phone number');
+                return;
+            }
+
+            // Show loading state
+            generateBtn.innerHTML = 'Generating...';
+            generateBtn.classList.add('btn-loading');
+            generateBtn.disabled = true;
+            resultDiv.innerHTML = '';
+
+            // Determine endpoint based on method
+            const endpoint = method === 'v2' ? '/api/request-pair-code-v2' : '/api/request-pair-code';
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ phoneNumber }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess(data.pairingCode, phoneNumber, method);
+                    startStatusCheck(phoneNumber);
+                } else {
+                    showError(data.error || 'Failed to generate pairing code');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Network error. Please check your connection.');
+            } finally {
+                generateBtn.innerHTML = 'Generate Pairing Code';
+                generateBtn.classList.remove('btn-loading');
+                generateBtn.disabled = false;
+            }
+        });
+
+        function showSuccess(pairingCode, phoneNumber, method) {
+            const methodText = method === 'v2' ? ' (Alternative Method)' : ' (WPPConnect)';
+            resultDiv.innerHTML = `
+                <div class="result success">
+                    <h3>✅ Pairing Code Generated!${methodText}</h3>
+                    <div class="pairing-code">${pairingCode}</div>
+                    <p><strong>Instructions:</strong></p>
+                    <p>1. Open WhatsApp on your phone</p>
+                    <p>2. Go to Settings → Linked Devices</p>
+                    <p>3. Tap "Link a Device" → "Link with phone number instead"</p>
+                    <p>4. Enter the code above</p>
+                    <p>5. Your session string will be sent to your WhatsApp DM</p>
+                    <div style="margin-top: 15px;">
+                        <span class="status-indicator status-waiting"></span>
+                        <span id="statusText">Waiting for WhatsApp connection...</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function showError(message) {
+            resultDiv.innerHTML = `
+                <div class="result error">
+                    <h3>❌ Error</h3>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+
+        function startStatusCheck(phoneNumber) {
+            let attempts = 0;
+            const maxAttempts = 60; // Check for 5 minutes
+
+            checkStatusInterval = setInterval(async () => {
+                attempts++;
+                
+                try {
+                    const response = await fetch(`/api/session-status/${phoneNumber}`);
+                    const data = await response.json();
+                    
+                    if (!data.active) {
+                        // Session completed
+                        const statusText = document.getElementById('statusText');
+                        const statusIndicator = document.querySelector('.status-indicator');
+                        
+                        if (statusText && statusIndicator) {
+                            statusText.textContent = 'Connected! Session string sent to your WhatsApp!';
+                            statusIndicator.className = 'status-indicator status-connected';
+                        }
+                        
+                        clearInterval(checkStatusInterval);
+                    } else if (attempts >= maxAttempts) {
+                        // Timeout
+                        const statusText = document.getElementById('statusText');
+                        if (statusText) {
+                            statusText.textContent = 'Connection timeout. Please try again.';
+                        }
+                        clearInterval(checkStatusInterval);
+                    }
+                } catch (error) {
+                    console.error('Status check error:', error);
+                }
+            }, 5000); // Check every 5 seconds
+        }
+
+        // Clean phone number input
+        phoneInput.addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/\D/g, '');
+        });
+
+        // Clear status check on page unload
+        window.addEventListener('beforeunload', () => {
+            if (checkStatusInterval) {
+                clearInterval(checkStatusInterval);
+            }
+        });
+    </script>
+</body>
+</html>

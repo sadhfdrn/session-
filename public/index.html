@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp Session Generator</title>
+    <title>WhatsApp Pair Code Generator</title>
     <style>
         * {
             margin: 0;
@@ -12,8 +12,8 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -22,8 +22,7 @@
         }
 
         .container {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
+            background: white;
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
             padding: 40px;
@@ -37,137 +36,142 @@
         .container::before {
             content: '';
             position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-            transform: rotate(45deg);
-            animation: shimmer 3s infinite;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #25D366, #128C7E, #075E54);
         }
 
-        @keyframes shimmer {
-            0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
-            100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+        .header {
+            margin-bottom: 30px;
         }
 
         .logo {
-            font-size: 3rem;
-            margin-bottom: 10px;
-            position: relative;
-            z-index: 1;
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(45deg, #25D366, #128C7E);
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            color: white;
+            box-shadow: 0 10px 20px rgba(37, 211, 102, 0.3);
         }
 
         h1 {
             color: #333;
+            font-size: 28px;
+            font-weight: 700;
             margin-bottom: 10px;
-            font-size: 2rem;
-            font-weight: 600;
-            position: relative;
-            z-index: 1;
         }
 
         .subtitle {
             color: #666;
-            margin-bottom: 30px;
-            font-size: 1.1rem;
-            position: relative;
-            z-index: 1;
+            font-size: 16px;
+            line-height: 1.5;
         }
 
         .form-group {
-            margin-bottom: 25px;
-            position: relative;
-            z-index: 1;
+            margin: 30px 0;
+            text-align: left;
         }
 
         label {
             display: block;
             margin-bottom: 8px;
-            color: #555;
-            font-weight: 500;
-            text-align: left;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .input-wrapper {
+            position: relative;
         }
 
         input[type="tel"] {
             width: 100%;
             padding: 15px 20px;
-            border: 2px solid #e1e5e9;
+            border: 2px solid #e0e0e0;
             border-radius: 12px;
-            font-size: 1.1rem;
+            font-size: 16px;
             transition: all 0.3s ease;
-            background: rgba(255, 255, 255, 0.8);
+            background: #f8f9fa;
         }
 
         input[type="tel"]:focus {
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-            transform: translateY(-2px);
+            border-color: #25D366;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.1);
+        }
+
+        input[type="tel"]:invalid {
+            border-color: #e74c3c;
         }
 
         .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
+            width: 100%;
             padding: 15px 30px;
+            border: none;
             border-radius: 12px;
-            font-size: 1.1rem;
+            font-size: 16px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-            width: 100%;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
             position: relative;
             overflow: hidden;
         }
 
-        .btn:hover:not(:disabled) {
+        .btn-primary {
+            background: linear-gradient(45deg, #25D366, #128C7E);
+            color: white;
+            box-shadow: 0 8px 20px rgba(37, 211, 102, 0.3);
+        }
+
+        .btn-primary:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+            box-shadow: 0 12px 25px rgba(37, 211, 102, 0.4);
         }
 
         .btn:disabled {
-            opacity: 0.7;
+            opacity: 0.6;
             cursor: not-allowed;
+            transform: none !important;
         }
 
-        .btn-loading {
-            position: relative;
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+            margin-top: 10px;
         }
 
-        .btn-loading::after {
-            content: '';
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            top: 50%;
-            left: 50%;
-            margin-left: -10px;
-            margin-top: -10px;
-            border: 2px solid transparent;
-            border-top: 2px solid white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
+        .btn-secondary:hover:not(:disabled) {
+            background: #5a6268;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .result {
-            margin-top: 25px;
-            padding: 20px;
+        .status-card {
+            background: #f8f9fa;
             border-radius: 12px;
-            position: relative;
-            z-index: 1;
-            animation: slideIn 0.5s ease-out;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #25D366;
+            text-align: left;
+            display: none;
+        }
+
+        .status-card.show {
+            display: block;
+            animation: slideIn 0.3s ease;
         }
 
         @keyframes slideIn {
             from {
                 opacity: 0;
-                transform: translateY(20px);
+                transform: translateY(-10px);
             }
             to {
                 opacity: 1;
@@ -175,273 +179,435 @@
             }
         }
 
-        .success {
-            background: linear-gradient(135deg, #4CAF50, #45a049);
-            color: white;
+        .status-card.error {
+            border-left-color: #e74c3c;
+            background: #fdf2f2;
         }
 
-        .error {
-            background: linear-gradient(135deg, #f44336, #da190b);
-            color: white;
+        .status-card.success {
+            border-left-color: #27ae60;
+            background: #f0f9f0;
+        }
+
+        .status-card.warning {
+            border-left-color: #f39c12;
+            background: #fefbf0;
+        }
+
+        .status-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .status-message {
+            color: #666;
+            line-height: 1.5;
         }
 
         .pairing-code {
-            font-size: 2rem;
-            font-weight: bold;
-            letter-spacing: 3px;
-            margin: 15px 0;
-            padding: 15px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
             font-family: 'Courier New', monospace;
+            font-size: 24px;
+            font-weight: bold;
+            background: #e8f5e8;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            letter-spacing: 2px;
+            color: #2d5a2d;
+            border: 2px dashed #25D366;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .timer {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 15px 0;
+            font-weight: 600;
+            color: #856404;
         }
 
         .instructions {
-            margin-top: 20px;
-            padding: 20px;
-            background: rgba(255, 255, 255, 0.1);
+            background: #e7f3ff;
             border-radius: 12px;
-            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 20px 0;
             text-align: left;
-            position: relative;
-            z-index: 1;
         }
 
         .instructions h3 {
-            color: #333;
+            color: #0066cc;
             margin-bottom: 10px;
         }
 
         .instructions ol {
-            color: #555;
-            padding-left: 20px;
+            margin-left: 20px;
+            color: #333;
         }
 
         .instructions li {
-            margin-bottom: 8px;
+            margin: 8px 0;
             line-height: 1.5;
         }
 
-        .status-indicator {
+        .health-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 8px;
+            padding: 10px 15px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            font-size: 14px;
+        }
+
+        .health-dot {
             display: inline-block;
-            width: 12px;
-            height: 12px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             margin-right: 8px;
-            animation: pulse 2s infinite;
         }
 
-        .status-waiting {
-            background: #ff9800;
+        .health-dot.online {
+            background: #27ae60;
         }
 
-        .status-connected {
-            background: #4CAF50;
+        .health-dot.offline {
+            background: #e74c3c;
         }
 
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-
-        @media (max-width: 480px) {
+        @media (max-width: 600px) {
             .container {
-                margin: 10px;
                 padding: 30px 20px;
+                margin: 10px;
             }
             
             h1 {
-                font-size: 1.5rem;
+                font-size: 24px;
             }
             
-            .logo {
-                font-size: 2rem;
+            .pairing-code {
+                font-size: 20px;
             }
         }
     </style>
 </head>
 <body>
+    <div class="health-status" id="healthStatus">
+        <span class="health-dot offline" id="healthDot"></span>
+        <span id="healthText">Checking...</span>
+    </div>
+
     <div class="container">
-        <div class="logo">📱</div>
-        <h1>WhatsApp Session Generator</h1>
-        <p class="subtitle">Generate your WhatsApp session string securely</p>
-        
-        <form id="sessionForm">
+        <div class="header">
+            <div class="logo">📱</div>
+            <h1>WhatsApp Pair Code</h1>
+            <p class="subtitle">Generate a pairing code to connect your WhatsApp account securely</p>
+        </div>
+
+        <form id="pairForm">
             <div class="form-group">
                 <label for="phoneNumber">Phone Number (with country code)</label>
-                <input 
-                    type="tel" 
-                    id="phoneNumber" 
-                    placeholder="e.g., 1234567890" 
-                    required
-                    pattern="[0-9]+"
-                    title="Please enter only numbers"
-                >
+                <div class="input-wrapper">
+                    <input 
+                        type="tel" 
+                        id="phoneNumber" 
+                        placeholder="+1234567890" 
+                        required
+                        pattern="^\+?[1-9]\d{8,14}$"
+                        title="Please enter a valid phone number with country code"
+                    >
+                </div>
             </div>
-            
-            <div class="form-group">
-                <label for="method">Generation Method</label>
-                <select id="method" class="btn" style="background: rgba(255,255,255,0.9); color: #333; text-align: left; padding: 15px 20px;">
-                    <option value="v1">WPPConnect Method (Recommended)</option>
-                    <option value="v2">Alternative Method (Experimental)</option>
-                </select>
-            </div>
-            
-            <button type="submit" class="btn" id="generateBtn">
+
+            <button type="submit" class="btn btn-primary" id="generateBtn">
                 Generate Pairing Code
             </button>
+
+            <button type="button" class="btn btn-secondary" id="cleanupBtn" style="display: none;">
+                Cleanup Session
+            </button>
         </form>
-        
-        <div id="result"></div>
-        
+
         <div class="instructions">
-            <h3>📋 How it works:</h3>
+            <h3>📋 How to use:</h3>
             <ol>
-                <li>Enter your phone number (numbers only, no + or spaces)</li>
-                <li>Choose your preferred generation method</li>
-                <li>Click "Generate Pairing Code"</li>
-                <li>Enter the code in WhatsApp Settings → Linked Devices</li>
-                <li>Your session string will be sent to your WhatsApp DM</li>
-                <li>Keep your session string safe and don't share it!</li>
+                <li>Enter your phone number with country code (e.g., +1234567890)</li>
+                <li>Click "Generate Pairing Code" to create a new pairing session</li>
+                <li>Open WhatsApp on your phone and go to <strong>Settings > Linked Devices</strong></li>
+                <li>Tap "Link a Device" and then "Link with phone number instead"</li>
+                <li>Enter the 8-digit pairing code when prompted</li>
+                <li>Your session token will be sent to your WhatsApp automatically</li>
             </ol>
-            <p style="margin-top: 15px; padding: 10px; background: rgba(255,193,7,0.1); border-radius: 8px; font-size: 0.9rem;">
-                <strong>🔄 New:</strong> Now using WPPConnect library for better reliability! If one method doesn't work, try the alternative method.
-            </p>
+        </div>
+
+        <div class="status-card" id="statusCard">
+            <div class="status-title" id="statusTitle"></div>
+            <div class="status-message" id="statusMessage"></div>
         </div>
     </div>
 
     <script>
-        const form = document.getElementById('sessionForm');
-        const phoneInput = document.getElementById('phoneNumber');
-        const methodSelect = document.getElementById('method');
-        const generateBtn = document.getElementById('generateBtn');
-        const resultDiv = document.getElementById('result');
-
-        let checkStatusInterval;
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const phoneNumber = phoneInput.value.trim();
-            const method = methodSelect.value;
-            
-            if (!phoneNumber) {
-                showError('Please enter a valid phone number');
-                return;
-            }
-
-            // Show loading state
-            generateBtn.innerHTML = 'Generating...';
-            generateBtn.classList.add('btn-loading');
-            generateBtn.disabled = true;
-            resultDiv.innerHTML = '';
-
-            // Determine endpoint based on method
-            const endpoint = method === 'v2' ? '/api/request-pair-code-v2' : '/api/request-pair-code';
-
-            try {
-                const response = await fetch(endpoint, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ phoneNumber }),
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    showSuccess(data.pairingCode, phoneNumber, method);
-                    startStatusCheck(phoneNumber);
-                } else {
-                    showError(data.error || 'Failed to generate pairing code');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                showError('Network error. Please check your connection.');
-            } finally {
-                generateBtn.innerHTML = 'Generate Pairing Code';
-                generateBtn.classList.remove('btn-loading');
-                generateBtn.disabled = false;
-            }
-        });
-
-        function showSuccess(pairingCode, phoneNumber, method) {
-            const methodText = method === 'v2' ? ' (Alternative Method)' : ' (WPPConnect)';
-            resultDiv.innerHTML = `
-                <div class="result success">
-                    <h3>✅ Pairing Code Generated!${methodText}</h3>
-                    <div class="pairing-code">${pairingCode}</div>
-                    <p><strong>Instructions:</strong></p>
-                    <p>1. Open WhatsApp on your phone</p>
-                    <p>2. Go to Settings → Linked Devices</p>
-                    <p>3. Tap "Link a Device" → "Link with phone number instead"</p>
-                    <p>4. Enter the code above</p>
-                    <p>5. Your session string will be sent to your WhatsApp DM</p>
-                    <div style="margin-top: 15px;">
-                        <span class="status-indicator status-waiting"></span>
-                        <span id="statusText">Waiting for WhatsApp connection...</span>
-                    </div>
-                </div>
-            `;
-        }
-
-        function showError(message) {
-            resultDiv.innerHTML = `
-                <div class="result error">
-                    <h3>❌ Error</h3>
-                    <p>${message}</p>
-                </div>
-            `;
-        }
-
-        function startStatusCheck(phoneNumber) {
-            let attempts = 0;
-            const maxAttempts = 60; // Check for 5 minutes
-
-            checkStatusInterval = setInterval(async () => {
-                attempts++;
+        class WhatsAppPairManager {
+            constructor() {
+                this.form = document.getElementById('pairForm');
+                this.phoneInput = document.getElementById('phoneNumber');
+                this.generateBtn = document.getElementById('generateBtn');
+                this.cleanupBtn = document.getElementById('cleanupBtn');
+                this.statusCard = document.getElementById('statusCard');
+                this.statusTitle = document.getElementById('statusTitle');
+                this.statusMessage = document.getElementById('statusMessage');
+                this.healthStatus = document.getElementById('healthStatus');
+                this.healthDot = document.getElementById('healthDot');
+                this.healthText = document.getElementById('healthText');
                 
+                this.currentPhoneNumber = null;
+                this.statusInterval = null;
+                this.healthInterval = null;
+                
+                this.init();
+            }
+
+            init() {
+                this.form.addEventListener('submit', (e) => this.handleSubmit(e));
+                this.cleanupBtn.addEventListener('click', () => this.cleanupSession());
+                
+                // Start health monitoring
+                this.checkHealth();
+                this.healthInterval = setInterval(() => this.checkHealth(), 30000);
+                
+                // Clean phone input on focus
+                this.phoneInput.addEventListener('input', (e) => {
+                    // Remove any non-digit characters except +
+                    e.target.value = e.target.value.replace(/[^\d+]/g, '');
+                });
+            }
+
+            async checkHealth() {
                 try {
-                    const response = await fetch(`/api/session-status/${phoneNumber}`);
+                    const response = await fetch('/api/health');
                     const data = await response.json();
                     
-                    if (!data.active) {
-                        // Session completed
-                        const statusText = document.getElementById('statusText');
-                        const statusIndicator = document.querySelector('.status-indicator');
-                        
-                        if (statusText && statusIndicator) {
-                            statusText.textContent = 'Connected! Session string sent to your WhatsApp!';
-                            statusIndicator.className = 'status-indicator status-connected';
-                        }
-                        
-                        clearInterval(checkStatusInterval);
-                    } else if (attempts >= maxAttempts) {
-                        // Timeout
-                        const statusText = document.getElementById('statusText');
-                        if (statusText) {
-                            statusText.textContent = 'Connection timeout. Please try again.';
-                        }
-                        clearInterval(checkStatusInterval);
+                    if (response.ok && data.status === 'healthy') {
+                        this.healthDot.className = 'health-dot online';
+                        this.healthText.textContent = `Online (${data.activeSessions} sessions)`;
+                    } else {
+                        throw new Error('Service unhealthy');
                     }
                 } catch (error) {
-                    console.error('Status check error:', error);
+                    this.healthDot.className = 'health-dot offline';
+                    this.healthText.textContent = 'Offline';
                 }
-            }, 5000); // Check every 5 seconds
+            }
+
+            async handleSubmit(e) {
+                e.preventDefault();
+                
+                const phoneNumber = this.phoneInput.value.trim();
+                if (!phoneNumber) {
+                    this.showStatus('error', 'Error', 'Please enter a phone number');
+                    return;
+                }
+
+                if (!this.validatePhoneNumber(phoneNumber)) {
+                    this.showStatus('error', 'Invalid Number', 'Please enter a valid phone number with country code (e.g., +1234567890)');
+                    return;
+                }
+
+                this.currentPhoneNumber = phoneNumber;
+                await this.generatePairCode(phoneNumber);
+            }
+
+            validatePhoneNumber(phoneNumber) {
+                // Basic validation for international phone numbers
+                const cleanNumber = phoneNumber.replace(/\D/g, '');
+                return cleanNumber.length >= 10 && cleanNumber.length <= 15 && phoneNumber.startsWith('+');
+            }
+
+            async generatePairCode(phoneNumber) {
+                this.setLoading(true);
+                this.showStatus('warning', 'Generating...', 'Creating WhatsApp session, please wait...');
+
+                try {
+                    const response = await fetch('/api/request-pair-code', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ phoneNumber }),
+                    });
+
+                    const data = await response.json();
+
+                    if (response.ok && data.success) {
+                        this.showPairCodeSuccess(data.pairingCode, phoneNumber);
+                        this.startStatusMonitoring(phoneNumber);
+                    } else {
+                        throw new Error(data.error || data.details || 'Unknown error occurred');
+                    }
+                } catch (error) {
+                    console.error('Pairing error:', error);
+                    this.showStatus('error', 'Generation Failed', error.message);
+                    this.setLoading(false);
+                }
+            }
+
+            showPairCodeSuccess(pairingCode, phoneNumber) {
+                const timerElement = document.createElement('div');
+                timerElement.className = 'timer';
+                timerElement.innerHTML = '⏰ Code valid for: <span id="countdown">120</span> seconds';
+
+                this.statusMessage.innerHTML = `
+                    <strong>Your pairing code:</strong>
+                    <div class="pairing-code">${pairingCode}</div>
+                    <p><strong>Phone:</strong> ${phoneNumber}</p>
+                    <p>Enter this code in WhatsApp within 2 minutes.</p>
+                `;
+                this.statusMessage.appendChild(timerElement);
+
+                this.showStatus('success', '✅ Code Generated Successfully', '');
+                this.setLoading(false);
+                this.cleanupBtn.style.display = 'block';
+
+                // Start countdown
+                this.startCountdown(120);
+            }
+
+            startCountdown(seconds) {
+                const countdownElement = document.getElementById('countdown');
+                if (!countdownElement) return;
+
+                const interval = setInterval(() => {
+                    seconds--;
+                    countdownElement.textContent = seconds;
+
+                    if (seconds <= 0) {
+                        clearInterval(interval);
+                        countdownElement.textContent = 'EXPIRED';
+                        countdownElement.parentElement.style.background = '#f8d7da';
+                        countdownElement.parentElement.style.borderColor = '#f5c6cb';
+                        countdownElement.parentElement.style.color = '#721c24';
+                    }
+                }, 1000);
+            }
+
+            async startStatusMonitoring(phoneNumber) {
+                if (this.statusInterval) {
+                    clearInterval(this.statusInterval);
+                }
+
+                this.statusInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch(`/api/session-status/${encodeURIComponent(phoneNumber)}`);
+                        const status = await response.json();
+
+                        if (status.state) {
+                            this.updateStatusFromServer(status.state);
+                        }
+                    } catch (error) {
+                        console.error('Status check error:', error);
+                    }
+                }, 3000);
+
+                // Auto-cleanup after 3 minutes
+                setTimeout(() => {
+                    if (this.statusInterval) {
+                        clearInterval(this.statusInterval);
+                        this.statusInterval = null;
+                    }
+                }, 180000);
+            }
+
+            updateStatusFromServer(state) {
+                switch (state.status) {
+                    case 'CONNECTED':
+                        this.showStatus('success', '🎉 Connected Successfully!', 'Your WhatsApp is now connected. Session token will be sent to your WhatsApp shortly.');
+                        break;
+                    case 'completed':
+                        this.showStatus('success', '✅ Process Complete', 'Session token has been sent to your WhatsApp. You can now use it in your applications.');
+                        this.stopMonitoring();
+                        break;
+                    case 'TIMEOUT':
+                    case 'DISCONNECTED':
+                        this.showStatus('error', '⏰ Session Expired', 'The pairing session has expired. Please try generating a new code.');
+                        this.stopMonitoring();
+                        break;
+                    case 'cleaned_up':
+                        this.showStatus('warning', '🧹 Session Cleaned', 'Session has been cleaned up.');
+                        this.stopMonitoring();
+                        break;
+                }
+            }
+
+            async cleanupSession() {
+                if (!this.currentPhoneNumber) return;
+
+                try {
+                    const response = await fetch(`/api/cleanup-session/${encodeURIComponent(this.currentPhoneNumber)}`, {
+                        method: 'DELETE'
+                    });
+
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        this.showStatus('warning', '🧹 Session Cleaned', 'Session has been cleaned up successfully.');
+                        this.stopMonitoring();
+                    } else {
+                        throw new Error(data.error || 'Cleanup failed');
+                    }
+                } catch (error) {
+                    console.error('Cleanup error:', error);
+                    this.showStatus('error', 'Cleanup Failed', error.message);
+                }
+            }
+
+            stopMonitoring() {
+                if (this.statusInterval) {
+                    clearInterval(this.statusInterval);
+                    this.statusInterval = null;
+                }
+                this.setLoading(false);
+                this.cleanupBtn.style.display = 'none';
+                this.currentPhoneNumber = null;
+            }
+
+            setLoading(loading) {
+                this.generateBtn.disabled = loading;
+                
+                if (loading) {
+                    this.generateBtn.innerHTML = '<span class="loading"></span>Generating...';
+                } else {
+                    this.generateBtn.innerHTML = 'Generate Pairing Code';
+                }
+            }
+
+            showStatus(type, title, message) {
+                this.statusCard.className = `status-card show ${type}`;
+                this.statusTitle.textContent = title;
+                this.statusMessage.innerHTML = message;
+            }
         }
 
-        // Clean phone number input
-        phoneInput.addEventListener('input', (e) => {
-            e.target.value = e.target.value.replace(/\D/g, '');
-        });
-
-        // Clear status check on page unload
-        window.addEventListener('beforeunload', () => {
-            if (checkStatusInterval) {
-                clearInterval(checkStatusInterval);
-            }
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new WhatsAppPairManager();
         });
     </script>
 </body>

@@ -99,7 +99,7 @@ const sendSessionViaWhatsApp = async (sock, phoneNumber, sessionData) => {
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Second message: creds.json content in one line
-        const credsMessage =`${sessionData}\n\n`
+        const credsMessage =${sessionData}
         await sock.sendMessage(jid, { text: credsMessage });
         console.log(`Creds.json sent via WhatsApp to: ${phoneNumber}`);
         return true;
@@ -198,16 +198,27 @@ const initializeWhatsApp = async (phoneNumber, io) => {
                                         message: 'Session sent to your WhatsApp! Check your messages.',
                                         sessionSent: true
                                     });
+                                    
+                                    // Clean up session after sending - allow reconnection
+                                    setTimeout(() => {
+                                        try {
+                                            if (activeSessions.has(phoneNumber)) {
+                                                const session = activeSessions.get(phoneNumber);
+                                                if (session.sock) {
+                                                    session.sock.end();
+                                                }
+                                                activeSessions.delete(phoneNumber);
+                                            }
+                                            // Clean up session directory
+                                            if (fs.existsSync(sessionPath)) {
+                                                fs.rmSync(sessionPath, { recursive: true, force: true });
+                                            }
+                                        } catch (cleanupError) {
+                                            console.error('Error cleaning up session:', cleanupError);
+                                        }
+                                    }, 10000); // Clean up after 10 seconds
                                 } else {
-                                    // Fallback: still offer download
-                                    const credsPath = path.join(sessionsDir, `${phoneNumber}_creds.json`);
-                                    fs.writeFileSync(credsPath, sessionData);
-                                    io.emit('sessionReady', { 
-                                        phoneNumber, 
-                                        downloadUrl: `/download/${phoneNumber}_creds.json`,
-                                        message: 'Failed to send via WhatsApp. Download your creds.json file.',
-                                        sessionSent: false
-                                    });
+                                    io.emit('error', { phoneNumber, message: 'Failed to send session via WhatsApp' });
                                 }
                             } else {
                                 io.emit('error', { phoneNumber, message: 'Error creating session file' });
@@ -263,10 +274,17 @@ io.on('connection', (socket) => {
         }
 
         try {
-            // Check if session already exists
+            // Allow multiple connections - clean up existing session if exists
             if (activeSessions.has(cleanPhoneNumber)) {
-                socket.emit('error', { message: 'Session already exists for this number' });
-                return;
+                const existingSession = activeSessions.get(cleanPhoneNumber);
+                try {
+                    if (existingSession.sock) {
+                        existingSession.sock.end();
+                    }
+                } catch (error) {
+                    console.error(`Error closing existing session for ${cleanPhoneNumber}:`, error);
+                }
+                activeSessions.delete(cleanPhoneNumber);
             }
 
             socket.emit('connectionStatus', { phoneNumber: cleanPhoneNumber, status: 'initializing' });
@@ -293,8 +311,17 @@ app.post('/api/generate-session', async (req, res) => {
     const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
     
     try {
+        // Allow multiple connections - clean up existing session if exists
         if (activeSessions.has(cleanPhoneNumber)) {
-            return res.status(400).json({ error: 'Session already exists for this number' });
+            const existingSession = activeSessions.get(cleanPhoneNumber);
+            try {
+                if (existingSession.sock) {
+                    existingSession.sock.end();
+                }
+            } catch (error) {
+                console.error(`Error closing existing session for ${cleanPhoneNumber}:`, error);
+            }
+            activeSessions.delete(cleanPhoneNumber);
         }
 
         await initializeWhatsApp(cleanPhoneNumber, io);

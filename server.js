@@ -99,7 +99,7 @@ const sendSessionViaWhatsApp = async (sock, phoneNumber, sessionData) => {
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Second message: creds.json content in one line
-        const credsMessage =${sessionData}
+        const credsMessage =`${sessionData}`
         await sock.sendMessage(jid, { text: credsMessage });
         console.log(`Creds.json sent via WhatsApp to: ${phoneNumber}`);
         return true;

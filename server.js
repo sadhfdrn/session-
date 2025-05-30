@@ -1,8 +1,11 @@
 const express = require('express');
 const cors = require('cors');
-const wppconnect = require('@wppconnect-team/wppconnect');
-const path = require('path');
+const { makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@fizzxydev/baileys-pro');
+const { Boom } = require('@hapi/boom');
+const pino = require('pino');
 const fs = require('fs');
+const path = require('path');
+const archiver = require('archiver');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,530 +17,319 @@ app.use(express.static('public'));
 
 // Store active sessions
 const activeSessions = new Map();
-const sessionStates = new Map();
-const pairingSessions = new Map(); // Store pairing sessions
 
-// Helper function to clean phone number
-function cleanPhoneNumber(phoneNumber) {
-    return phoneNumber.replace(/\D/g, '');
+// Logger
+const logger = pino({ level: 'silent' });
+
+// Ensure sessions directory exists
+const sessionsDir = path.join(__dirname, 'sessions');
+if (!fs.existsSync(sessionsDir)) {
+    fs.mkdirSync(sessionsDir, { recursive: true });
 }
 
-// Create sessions directory if it doesn't exist
-if (!fs.existsSync('./tokens')) {
-    fs.mkdirSync('./tokens', { recursive: true });
-}
+// Generate session folder path
+const getSessionPath = (phoneNumber) => {
+    return path.join(sessionsDir, `session_${phoneNumber}`);
+};
 
-// Detect Chrome executable path
-function getChromePath() {
-    const possiblePaths = [
-        '/usr/bin/google-chrome-stable',
-        '/usr/bin/google-chrome',
-        '/usr/bin/chromium-browser',
-        '/usr/bin/chromium',
-        '/snap/bin/chromium',
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-        process.env.CHROME_BIN,
-        process.env.PUPPETEER_EXECUTABLE_PATH
-    ];
-    
-    for (const chromePath of possiblePaths) {
-        if (chromePath && fs.existsSync(chromePath)) {
-            console.log('✅ Chrome found at:', chromePath);
-            return chromePath;
-        }
-    }
-    
-    console.log('⚠️ Chrome not found in standard locations, using system default');
-    return null;
-}
-
-const CHROME_PATH = getChromePath();
-
-// Optimized browser configuration for pairing codes
-function getBrowserConfig() {
-    const isCloud = process.env.NODE_ENV === 'production' || process.env.KOYEB_APP_NAME;
-    
-    const config = {
-        headless: 'new',
-        devtools: false,
-        useChrome: true,
-        debug: false,
-        logQR: false,
-        browserWS: '',
-        disableSpins: true,
-        disableWelcome: true,
-        updatesLog: false,
-        autoClose: 120000, // 2 minutes timeout
-        createPathFileToken: false,
-        waitForLogin: 60000, // 1 minute wait
-        browserArgs: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu',
-            '--disable-web-security',
-            '--disable-features=VizDisplayCompositor',
-            '--disable-background-timer-throttling',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-renderer-backgrounding',
-            '--disable-extensions',
-            '--disable-plugins',
-            '--disable-default-apps',
-            '--disable-hang-monitor',
-            '--disable-prompt-on-repost',
-            '--disable-sync',
-            '--disable-translate',
-            '--metrics-recording-only',
-            '--no-default-browser-check',
-            '--safebrowsing-disable-auto-update',
-            '--enable-automation',
-            '--password-store=basic',
-            '--use-mock-keychain',
-            '--disable-blink-features=AutomationControlled',
-            '--disable-ipc-flooding-protection',
-            '--remote-debugging-port=0', // Use random port
-            '--single-process', // Use single process for better stability
-            '--no-crash-upload'
-        ],
-        puppeteerOptions: {
-            headless: 'new',
-            timeout: 90000, // 90 seconds timeout
-            protocolTimeout: 90000,
-            ignoreHTTPSErrors: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-web-security',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
-                '--disable-extensions',
-                '--disable-plugins',
-                '--disable-default-apps',
-                '--disable-hang-monitor',
-                '--disable-prompt-on-repost',
-                '--disable-sync',
-                '--disable-translate',
-                '--metrics-recording-only',
-                '--no-default-browser-check',
-                '--safebrowsing-disable-auto-update',
-                '--enable-automation',
-                '--password-store=basic',
-                '--use-mock-keychain',
-                '--disable-blink-features=AutomationControlled',
-                '--remote-debugging-port=0',
-                '--single-process',
-                '--no-crash-upload',
-                '--disable-ipc-flooding-protection'
-            ]
-        }
-    };
-
-    // Set Chrome executable path
-    if (CHROME_PATH) {
-        config.puppeteerOptions.executablePath = CHROME_PATH;
-        console.log('🚀 Using Chrome from:', CHROME_PATH);
-    }
-
-    // Cloud-specific optimizations
-    if (isCloud) {
-        config.browserArgs.push(
-            '--memory-pressure-off',
-            '--max_old_space_size=2048',
-            '--disable-background-networking',
-            '--mute-audio',
-            '--disable-software-rasterizer'
-        );
-        
-        config.puppeteerOptions.args.push(
-            '--memory-pressure-off',
-            '--max_old_space_size=2048',
-            '--disable-background-networking'
-        );
-    }
-
-    console.log(`🔧 Browser config for ${isCloud ? 'cloud' : 'local'} environment`);
-    return config;
-}
-
-// Enhanced client creation with better error handling
-async function createWppConnectClient(sessionName, cleanedNumber, maxRetries = 2) {
-    const browserConfig = getBrowserConfig();
-    let client = null;
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            console.log(`📞 Attempt ${attempt}/${maxRetries} to create client for ${cleanedNumber}`);
-            
-            // Create client with promise race for timeout
-            client = await Promise.race([
-                wppconnect.create({
-                    session: sessionName,
-                    tokenStore: 'file',
-                    folderNameToken: './tokens',
-                    ...browserConfig,
-                    catchQR: (base64Qr, asciiQR, attempts, urlCode) => {
-                        console.log(`📱 QR Code received (attempt ${attempts}) for ${cleanedNumber}`);
-                        // Don't store QR for pair code method
-                    },
-                    statusFind: (statusSession, session) => {
-                        console.log('📊 Status:', statusSession, 'for', session);
-                        
-                        const phoneNum = session.replace(/^session_/, '');
-                        sessionStates.set(phoneNum, { 
-                            ...sessionStates.get(phoneNum),
-                            status: statusSession, 
-                            timestamp: Date.now(),
-                            session: session 
-                        });
-                        
-                        // Handle different states
-                        if (statusSession === 'CONNECTED') {
-                            handleSuccessfulConnection(client, phoneNum);
-                        } else if (statusSession === 'TIMEOUT' || statusSession === 'DISCONNECTED') {
-                            console.log(`⚠️ Session ${statusSession} for ${phoneNum}`);
-                        }
-                    },
-                    onLoadingScreen: (percent, message) => {
-                        console.log('⏳ Loading:', percent + '%', message);
-                    }
-                }),
-                // Timeout promise
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Client creation timeout after 120s')), 120000)
-                )
-            ]);
-            
-            console.log(`✅ Client created successfully for ${cleanedNumber} on attempt ${attempt}`);
-            return client;
-            
-        } catch (error) {
-            console.error(`❌ Attempt ${attempt}/${maxRetries} failed for ${cleanedNumber}:`, error.message);
-            
-            // Close any partial client
-            if (client) {
-                try {
-                    await client.close();
-                } catch (closeError) {
-                    console.error('Error closing partial client:', closeError.message);
-                }
-                client = null;
-            }
-            
-            // Clean up any partial sessions
-            await cleanupSession(cleanedNumber, null, false);
-            
-            if (attempt === maxRetries) {
-                throw new Error(`Failed after ${maxRetries} attempts: ${error.message}`);
-            }
-            
-            // Wait before retry
-            const waitTime = 5000 * attempt;
-            console.log(`⏳ Waiting ${waitTime}ms before retry...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-        }
-    }
-}
-
-// Main pairing code endpoint
-app.post('/api/request-pair-code', async (req, res) => {
-    let cleanedNumber = '';
-    let client = null;
-    
+// Create single creds.json from session data
+const createCredsJson = (sessionPath) => {
     try {
-        const { phoneNumber } = req.body;
+        const credsPath = path.join(sessionPath, 'creds.json');
+        const preKeysPath = path.join(sessionPath, 'pre-key-1.json');
+        const senderKeysPath = path.join(sessionPath, 'sender-key-120363025246125888@g.us--1234567890@s.whatsapp.net--0.json');
+        
+        let credsData = {};
+        let preKeysData = {};
+        let senderKeysData = {};
+        
+        // Read creds.json
+        if (fs.existsSync(credsPath)) {
+            credsData = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+        }
+        
+        // Read pre-keys (find the first pre-key file)
+        const files = fs.readdirSync(sessionPath);
+        const preKeyFile = files.find(file => file.startsWith('pre-key-'));
+        if (preKeyFile) {
+            const preKeyPath = path.join(sessionPath, preKeyFile);
+            preKeysData = JSON.parse(fs.readFileSync(preKeyPath, 'utf8'));
+        }
+        
+        // Read sender keys (find the first sender-key file)
+        const senderKeyFile = files.find(file => file.startsWith('sender-key-'));
+        if (senderKeyFile) {
+            const senderKeyPath = path.join(sessionPath, senderKeyFile);
+            senderKeysData = JSON.parse(fs.readFileSync(senderKeyPath, 'utf8'));
+        }
+        
+        // Combine all data into single creds.json
+        const combinedCreds = {
+            ...credsData,
+            preKeys: preKeysData,
+            senderKeys: senderKeysData,
+            timestamp: new Date().toISOString()
+        };
+        
+        return JSON.stringify(combinedCreds);
+    } catch (error) {
+        console.error('Error creating creds.json:', error);
+        return null;
+    }
+};
+
+// Send session via WhatsApp message
+const sendSessionViaWhatsApp = async (sock, phoneNumber, sessionData) => {
+    try {
+        const jid = phoneNumber + '@s.whatsapp.net';
+        
+        // First message: Usage instructions
+        const instructionsMessage = `🔐 *WhatsApp Session Generated Successfully*\n\n` +
+                                   `📱 *Instructions:*\n` +
+                                   `1. Save the next message as "creds.json"\n` +
+                                   `2. Use it in your WhatsApp bot project\n` +
+                                   `3. Keep it secure and don't share\n\n` +
+                                   `⚠️ *Important:* This session is tied to this device. If you logout from WhatsApp, you'll need to generate a new session.\n\n` +
+                                   `The creds.json content will be sent in the next message...`;
+        
+        await sock.sendMessage(jid, { text: instructionsMessage });
+        console.log(`Instructions sent via WhatsApp to: ${phoneNumber}`);
+        
+        // Wait a moment before sending the second message
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Second message: creds.json content in one line
+        const credsMessage =`${sessionData}\n\n`
+        await sock.sendMessage(jid, { text: credsMessage });
+        console.log(`Creds.json sent via WhatsApp to: ${phoneNumber}`);
+        return true;
+    } catch (error) {
+        console.error('Error sending session via WhatsApp:', error);
+        return false;
+    }
+};
+
+// Initialize WhatsApp connection
+const initializeWhatsApp = async (phoneNumber, io) => {
+    try {
+        const sessionPath = getSessionPath(phoneNumber);
+        
+        // Create session directory if it doesn't exist
+        if (!fs.existsSync(sessionPath)) {
+            fs.mkdirSync(sessionPath, { recursive: true });
+        }
+
+        const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+        const { version, isLatest } = await fetchLatestBaileysVersion();
+
+        const sock = makeWASocket({
+            version,
+            logger,
+            printQRInTerminal: false,
+            auth: state,
+            generateHighQualityLinkPreview: true,
+            getMessage: async (key) => {
+                return { conversation: 'Hello' };
+            },
+        });
+
+        // Store session
+        activeSessions.set(phoneNumber, {
+            sock,
+            sessionPath,
+            saveCreds,
+            connected: false
+        });
+
+        // Handle pairing code
+        if (!sock.authState.creds.registered) {
+            setTimeout(async () => {
+                try {
+                    const pairingCode = await sock.requestPairingCode(phoneNumber);
+                    console.log('Pairing code generated:', pairingCode, 'for:', phoneNumber);
+                    io.emit('pairingCode', { phoneNumber, pairingCode });
+                } catch (error) {
+                    console.error('Error requesting pairing code:', error);
+                    io.emit('error', { phoneNumber, message: 'Failed to generate pairing code' });
+                }
+            }, 3000);
+        }
+
+        // Handle connection updates
+        sock.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect, qr, isNewLogin } = update;
+            
+            console.log('Connection update:', { connection, phoneNumber });
+
+            if (connection === 'close') {
+                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+                console.log('Connection closed:', lastDisconnect?.error);
+                
+                if (shouldReconnect) {
+                    io.emit('connectionStatus', { phoneNumber, status: 'reconnecting' });
+                    // Clean up current session before reconnecting
+                    activeSessions.delete(phoneNumber);
+                    setTimeout(() => initializeWhatsApp(phoneNumber, io), 5000);
+                } else {
+                    io.emit('connectionStatus', { phoneNumber, status: 'logged_out' });
+                    activeSessions.delete(phoneNumber);
+                }
+            } else if (connection === 'open') {
+                console.log('WhatsApp connected successfully for:', phoneNumber);
+                io.emit('connectionStatus', { phoneNumber, status: 'connected' });
+                
+                const session = activeSessions.get(phoneNumber);
+                if (session) {
+                    session.connected = true;
+                    
+                    // Wait a moment for session to stabilize
+                    setTimeout(async () => {
+                        try {
+                            // Create single creds.json
+                            const sessionData = createCredsJson(sessionPath);
+                            
+                            if (sessionData) {
+                                // Send session via WhatsApp
+                                const sent = await sendSessionViaWhatsApp(sock, phoneNumber, sessionData);
+                                
+                                if (sent) {
+                                    io.emit('sessionReady', { 
+                                        phoneNumber, 
+                                        message: 'Session sent to your WhatsApp! Check your messages.',
+                                        sessionSent: true
+                                    });
+                                } else {
+                                    // Fallback: still offer download
+                                    const credsPath = path.join(sessionsDir, `${phoneNumber}_creds.json`);
+                                    fs.writeFileSync(credsPath, sessionData);
+                                    io.emit('sessionReady', { 
+                                        phoneNumber, 
+                                        downloadUrl: `/download/${phoneNumber}_creds.json`,
+                                        message: 'Failed to send via WhatsApp. Download your creds.json file.',
+                                        sessionSent: false
+                                    });
+                                }
+                            } else {
+                                io.emit('error', { phoneNumber, message: 'Error creating session file' });
+                            }
+                        } catch (error) {
+                            console.error('Error processing session:', error);
+                            io.emit('error', { phoneNumber, message: 'Error processing session' });
+                        }
+                    }, 3000);
+                }
+            } else if (connection === 'connecting') {
+                io.emit('connectionStatus', { phoneNumber, status: 'connecting' });
+            }
+        });
+
+        // Handle credentials update
+        sock.ev.on('creds.update', saveCreds);
+
+        return sock;
+    } catch (error) {
+        console.error('Error initializing WhatsApp:', error);
+        io.emit('error', { phoneNumber, message: 'Failed to initialize WhatsApp connection' });
+        throw error;
+    }
+};
+
+// Socket.IO setup
+const server = require('http').createServer(app);
+const io = require('socket.io')(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+
+    socket.on('generateSession', async (data) => {
+        const { phoneNumber } = data;
         
         if (!phoneNumber) {
-            return res.status(400).json({ error: 'Phone number is required' });
+            socket.emit('error', { message: 'Phone number is required' });
+            return;
         }
 
-        cleanedNumber = cleanPhoneNumber(phoneNumber);
-        const sessionName = `session_${cleanedNumber}`;
-
-        // Validate phone number format
-        if (cleanedNumber.length < 10 || cleanedNumber.length > 15) {
-            return res.status(400).json({ error: 'Invalid phone number format' });
+        // Validate phone number format (basic validation)
+        const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
+        if (cleanPhoneNumber.length < 10) {
+            socket.emit('error', { message: 'Invalid phone number format' });
+            return;
         }
 
-        // Check if session already exists
-        if (activeSessions.has(cleanedNumber)) {
-            return res.status(400).json({ 
-                error: 'Session already active for this number. Please wait or cleanup first.' 
-            });
+        try {
+            // Check if session already exists
+            if (activeSessions.has(cleanPhoneNumber)) {
+                socket.emit('error', { message: 'Session already exists for this number' });
+                return;
+            }
+
+            socket.emit('connectionStatus', { phoneNumber: cleanPhoneNumber, status: 'initializing' });
+            await initializeWhatsApp(cleanPhoneNumber, io);
+        } catch (error) {
+            console.error('Error generating session:', error);
+            socket.emit('error', { phoneNumber: cleanPhoneNumber, message: 'Failed to generate session' });
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Client disconnected:', socket.id);
+    });
+});
+
+// REST API endpoints
+app.post('/api/generate-session', async (req, res) => {
+    const { phoneNumber } = req.body;
+    
+    if (!phoneNumber) {
+        return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
+    
+    try {
+        if (activeSessions.has(cleanPhoneNumber)) {
+            return res.status(400).json({ error: 'Session already exists for this number' });
         }
 
-        // Set initial session state
-        sessionStates.set(cleanedNumber, { 
-            status: 'initializing', 
-            timestamp: Date.now(),
-            phoneNumber: cleanedNumber
-        });
+        await initializeWhatsApp(cleanPhoneNumber, io);
+        res.json({ success: true, message: 'Session generation started', phoneNumber: cleanPhoneNumber });
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Failed to generate session' });
+    }
+});
 
-        console.log(`🚀 Starting pairing process for ${cleanedNumber}`);
-
-        // Create client
-        client = await createWppConnectClient(sessionName, cleanedNumber);
-
-        // Store the client
-        activeSessions.set(cleanedNumber, client);
-        pairingSessions.set(cleanedNumber, { client, startTime: Date.now() });
-
-        // Wait a moment for client to fully initialize
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        // Request pairing code
-        console.log(`📱 Requesting pairing code for ${cleanedNumber}...`);
-        
-        const pairingCode = await Promise.race([
-            client.requestPairingCode(cleanedNumber),
-            new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Pairing code request timeout')), 60000)
-            )
-        ]);
-        
-        if (pairingCode) {
-            console.log(`✅ Pairing code generated for ${cleanedNumber}: ${pairingCode}`);
-            
-            sessionStates.set(cleanedNumber, { 
-                ...sessionStates.get(cleanedNumber),
-                status: 'code_generated',
-                pairingCode: pairingCode,
-                timestamp: Date.now() 
-            });
-
-            // Set up connection monitoring
-            setupConnectionMonitoring(client, cleanedNumber);
-
-            res.json({ 
-                success: true, 
-                pairingCode: pairingCode,
-                message: 'Pairing code generated successfully. Enter it in WhatsApp within 60 seconds.',
-                phoneNumber: cleanedNumber
-            });
+// Download endpoint for session files
+app.get('/download/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(sessionsDir, filename);
+    
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File not found' });
+    }
+    
+    res.download(filePath, (err) => {
+        if (err) {
+            console.error('Download error:', err);
+            res.status(500).json({ error: 'Download failed' });
         } else {
-            throw new Error('No pairing code received');
-        }
-
-    } catch (error) {
-        console.error('💥 Error in pairing process:', error.message);
-        
-        // Comprehensive cleanup
-        await cleanupSession(cleanedNumber, client);
-        
-        res.status(500).json({ 
-            error: 'Failed to generate pairing code',
-            details: error.message,
-            phoneNumber: cleanedNumber || 'unknown'
-        });
-    }
-});
-
-// Set up connection monitoring
-function setupConnectionMonitoring(client, cleanedNumber) {
-    // Monitor state changes
-    client.onStateChange((state) => {
-        console.log('🔄 State changed:', state, 'for', cleanedNumber);
-        
-        sessionStates.set(cleanedNumber, { 
-            ...sessionStates.get(cleanedNumber),
-            status: state, 
-            timestamp: Date.now() 
-        });
-        
-        if (state === 'CONNECTED') {
-            handleSuccessfulConnection(client, cleanedNumber);
-        } else if (state === 'TIMEOUT' || state === 'DISCONNECTED') {
-            setTimeout(() => cleanupSession(cleanedNumber, client), 5000);
-        }
-    });
-
-    // Monitor stream changes
-    client.onStreamChange((state) => {
-        console.log('📡 Stream state:', state, 'for', cleanedNumber);
-    });
-
-    // Set timeout for pairing
-    setTimeout(() => {
-        const currentState = sessionStates.get(cleanedNumber);
-        if (currentState && currentState.status !== 'CONNECTED') {
-            console.log(`⏰ Pairing timeout for ${cleanedNumber}`);
-            cleanupSession(cleanedNumber, client);
-        }
-    }, 120000); // 2 minutes timeout
-}
-
-// Handle successful connection
-async function handleSuccessfulConnection(client, cleanedNumber) {
-    try {
-        console.log(`🎉 Successfully connected for ${cleanedNumber}`);
-        
-        // Update status
-        sessionStates.set(cleanedNumber, { 
-            ...sessionStates.get(cleanedNumber),
-            status: 'CONNECTED', 
-            timestamp: Date.now() 
-        });
-        
-        // Wait for full initialization
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        
-        // Get session data
-        const sessionData = await client.getSessionTokenBrowser();
-        const sessionString = JSON.stringify(sessionData);
-        const encodedSession = Buffer.from(sessionString).toString('base64');
-        
-        // Send session string to user
-        await client.sendText(`${cleanedNumber}@c.us`, 
-            `🔐 *Your WhatsApp Session Token*\n\n\`\`\`${encodedSession}\`\`\`\n\n⚠️ *Keep this safe and don't share it with anyone!*\n\n✅ Your session has been successfully generated.`
-        );
-        
-        console.log('📤 Session string sent to user:', cleanedNumber);
-        
-        // Update status
-        sessionStates.set(cleanedNumber, { 
-            ...sessionStates.get(cleanedNumber),
-            status: 'completed', 
-            timestamp: Date.now() 
-        });
-        
-        // Schedule cleanup
-        setTimeout(() => {
-            cleanupSession(cleanedNumber, client);
-        }, 15000); // Wait 15 seconds before cleanup
-        
-    } catch (error) {
-        console.error('❌ Error in successful connection handler:', error.message);
-        setTimeout(() => cleanupSession(cleanedNumber, client), 5000);
-    }
-}
-
-// Enhanced cleanup function
-async function cleanupSession(phoneNumber, client = null, removeFiles = true) {
-    try {
-        const cleanedNumber = typeof phoneNumber === 'string' ? cleanPhoneNumber(phoneNumber) : phoneNumber;
-        
-        console.log(`🧹 Cleaning up session for ${cleanedNumber}`);
-        
-        // Close client
-        const sessionClient = client || activeSessions.get(cleanedNumber);
-        if (sessionClient) {
-            try {
-                await Promise.race([
-                    sessionClient.close(),
-                    new Promise(resolve => setTimeout(resolve, 5000)) // 5s timeout for close
-                ]);
-                console.log(`✅ Client closed for ${cleanedNumber}`);
-            } catch (closeError) {
-                console.error('❌ Error closing client:', closeError.message);
-            }
-        }
-        
-        // Remove from maps
-        activeSessions.delete(cleanedNumber);
-        pairingSessions.delete(cleanedNumber);
-        sessionStates.set(cleanedNumber, { 
-            status: 'cleaned_up', 
-            timestamp: Date.now(),
-            phoneNumber: cleanedNumber
-        });
-        
-        // Clean up token files if requested
-        if (removeFiles) {
-            const tokenPath = `./tokens/session_${cleanedNumber}`;
-            if (fs.existsSync(tokenPath)) {
+            // Delete the file after download
+            setTimeout(() => {
                 try {
-                    fs.rmSync(tokenPath, { recursive: true, force: true });
-                    console.log(`🗑️ Removed token directory: ${tokenPath}`);
-                } catch (fsError) {
-                    console.error('❌ Error removing token directory:', fsError.message);
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                    }
+                } catch (deleteErr) {
+                    console.error('Error deleting file:', deleteErr);
                 }
-            }
+            }, 5000);
         }
-        
-    } catch (error) {
-        console.error('❌ Error in cleanup:', error.message);
-    }
-}
-
-// Session status endpoint
-app.get('/api/session-status/:phoneNumber', (req, res) => {
-    const { phoneNumber } = req.params;
-    const cleanedNumber = cleanPhoneNumber(phoneNumber);
-    
-    const state = sessionStates.get(cleanedNumber);
-    const isActive = activeSessions.has(cleanedNumber);
-    const pairingSession = pairingSessions.get(cleanedNumber);
-    
-    res.json({ 
-        active: isActive,
-        state: state || null,
-        timestamp: state ? state.timestamp : null,
-        phoneNumber: cleanedNumber,
-        pairingActive: !!pairingSession,
-        pairingStartTime: pairingSession ? pairingSession.startTime : null
-    });
-});
-
-// Manual cleanup endpoint
-app.delete('/api/cleanup-session/:phoneNumber', async (req, res) => {
-    try {
-        const { phoneNumber } = req.params;
-        const cleanedNumber = cleanPhoneNumber(phoneNumber);
-        
-        await cleanupSession(cleanedNumber);
-        
-        res.json({ 
-            success: true, 
-            message: 'Session cleaned up successfully',
-            phoneNumber: cleanedNumber 
-        });
-    } catch (error) {
-        res.status(500).json({ 
-            error: 'Failed to cleanup session',
-            details: error.message 
-        });
-    }
-});
-
-// Enhanced health check
-app.get('/api/health', (req, res) => {
-    const memUsage = process.memoryUsage();
-    
-    res.json({ 
-        status: 'healthy', 
-        activeSessions: activeSessions.size,
-        activeStates: sessionStates.size,
-        pairingSessions: pairingSessions.size,
-        library: 'wppconnect',
-        chromePath: CHROME_PATH || 'system-default',
-        memory: {
-            rss: Math.round(memUsage.rss / 1024 / 1024) + ' MB',
-            heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + ' MB',
-            heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + ' MB'
-        },
-        uptime: Math.round(process.uptime()) + ' seconds',
-        timestamp: new Date().toISOString()
-    });
-});
-
-// Get system info
-app.get('/api/info', (req, res) => {
-    res.json({
-        nodejs: process.version,
-        platform: process.platform,
-        arch: process.arch,
-        chromePath: CHROME_PATH,
-        environment: process.env.NODE_ENV || 'development',
-        activeSessions: Array.from(activeSessions.keys()),
-        sessionStates: Array.from(sessionStates.entries()),
-        pairingSessions: Array.from(pairingSessions.keys())
     });
 });
 
@@ -546,48 +338,48 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Graceful shutdown
-async function gracefulShutdown() {
-    console.log('🛑 Shutting down gracefully...');
-    
-    const cleanupPromises = Array.from(activeSessions.entries()).map(([phoneNumber, client]) => 
-        cleanupSession(phoneNumber, client, false)
-    );
-    
-    await Promise.allSettled(cleanupPromises);
-    console.log('✅ All sessions cleaned up');
-    process.exit(0);
-}
-
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
-
-// Auto-cleanup old sessions every 3 minutes
-setInterval(() => {
-    const now = Date.now();
-    const maxAge = 5 * 60 * 1000; // 5 minutes
-    
-    for (const [phoneNumber, state] of sessionStates.entries()) {
-        if (state.status !== 'CONNECTED' && state.status !== 'completed' && (now - state.timestamp > maxAge)) {
-            console.log(`🧹 Auto-cleaning old session: ${phoneNumber} (status: ${state.status})`);
-            cleanupSession(phoneNumber);
-        }
-    }
-    
-    // Clean up old pairing sessions
-    for (const [phoneNumber, pairingSession] of pairingSessions.entries()) {
-        if (now - pairingSession.startTime > maxAge) {
-            console.log(`🧹 Auto-cleaning old pairing session: ${phoneNumber}`);
-            cleanupSession(phoneNumber);
-        }
-    }
-}, 3 * 60 * 1000);
-
-app.listen(PORT, () => {
-    console.log(`🚀 WhatsApp Pair Code Generator running on port ${PORT}`);
-    console.log(`📱 Frontend: http://localhost:${PORT}`);
-    console.log(`🔧 Health check: http://localhost:${PORT}/api/health`);
-    console.log(`ℹ️ System info: http://localhost:${PORT}/api/info`);
-    console.log(`🌐 Chrome path: ${CHROME_PATH || 'system-default'}`);
-    console.log(`💾 Memory limit: ${process.env.NODE_OPTIONS || 'default'}`);
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        activeSessions: activeSessions.size,
+        timestamp: new Date().toISOString()
+    });
 });
+
+// Get active sessions
+app.get('/api/sessions', (req, res) => {
+    const sessions = Array.from(activeSessions.keys()).map(phoneNumber => ({
+        phoneNumber,
+        connected: activeSessions.get(phoneNumber)?.connected || false
+    }));
+    
+    res.json({ sessions });
+});
+
+// Cleanup function
+const cleanup = () => {
+    console.log('Cleaning up...');
+    activeSessions.forEach((session, phoneNumber) => {
+        try {
+            if (session.sock) {
+                session.sock.end();
+            }
+        } catch (error) {
+            console.error(`Error closing session for ${phoneNumber}:`, error);
+        }
+    });
+    activeSessions.clear();
+};
+
+// Handle process termination
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+
+// Start server
+server.listen(PORT, () => {
+    console.log(`WhatsApp Session Generator running on port ${PORT}`);
+    console.log(`Health check: http://localhost:${PORT}/api/health`);
+});
+
+module.exports = app;
